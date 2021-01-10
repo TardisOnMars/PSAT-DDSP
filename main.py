@@ -1,0 +1,105 @@
+import os
+import warnings
+
+import tensorflow as tf
+import ddsp.training
+import gin
+import pickle
+import numpy as np
+
+from utils import play, detect_notes, fit_quantile_transform, shift_f0, auto_tune, get_tuning_factor
+from note_gen import Song
+from jukebox_prompt import JBPrompt
+
+
+warnings.filterwarnings("ignore")
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
+jbprompt = JBPrompt()
+
+song = Song(jbprompt.selected_song[0], jbprompt.selected_song[1])
+
+hop_size = 64
+f0_confidence, f0_hz, loudness_db, n_frames = song.gen_tensor()
+n_samples = n_frames * hop_size
+
+batch = {"f0_confidence": f0_confidence, "f0_hz": f0_hz, "loudness_db": loudness_db}
+
+# Load the dataset statistics.
+DATASET_STATS = None
+dataset_stats_file = os.path.join(jbprompt.selected_instrument[0], 'dataset_statistics_lower.pkl')
+print(f'Loading dataset statistics from {dataset_stats_file}')
+try:
+    if tf.io.gfile.exists(dataset_stats_file):
+        with tf.io.gfile.GFile(dataset_stats_file, 'rb') as f:
+            DATASET_STATS = pickle.load(f)
+except Exception as err:
+    print('Loading dataset statistics from pickle failed: {}.'.format(err))
+
+# Parse the gin config.
+gin_file = os.path.join(jbprompt.selected_instrument[0], 'operative_config-0.gin')
+
+gin_params = [
+    'Additive.n_samples = {}'.format(n_samples),
+    'FilteredNoise.n_samples = {}'.format(n_samples),
+    'DefaultPreprocessor.time_steps = {}'.format(n_frames),
+    'oscillator_bank.use_angular_cumsum = True',  # Avoids cumsum accumulation errors.
+]
+
+gin.parse_config_file(gin_file, skip_unknown=True)
+gin.parse_config(gin_params)
+
+model = ddsp.training.models.Autoencoder()
+model.restore(jbprompt.selected_instrument[1])
+
+if DATASET_STATS is not None:
+    # Detect sections that are "on".
+    mask_on, note_on_value = detect_notes(batch['loudness_db'],
+                                          batch['f0_confidence'], )
+    batch_mod = {k: v.copy() for k, v in batch.items()}
+    quiet = 20
+    autotune = 0
+
+    if np.any(mask_on):
+        # Shift the pitch register.
+        target_mean_pitch = DATASET_STATS['mean_pitch']
+        pitch = ddsp.core.hz_to_midi(batch['f0_hz'])
+        mean_pitch = np.mean(pitch[mask_on])
+        p_diff = target_mean_pitch - mean_pitch
+        p_diff_octave = p_diff / 12.0
+        round_fn = np.floor if p_diff_octave > 1.5 else np.ceil
+        p_diff_octave = round_fn(p_diff_octave)
+        audio_features_mod = shift_f0(batch_mod, p_diff_octave)
+
+        # Quantile shift the note_on parts.
+        _, loudness_norm = fit_quantile_transform(
+            batch['loudness_db'],
+            mask_on,
+            inv_quantile=DATASET_STATS['quantile_transform'])
+
+        # Turn down the note_off parts.
+        mask_off = np.logical_not(mask_on)
+        loudness_norm[mask_off] -= quiet * (1.0 - note_on_value[mask_off][:, np.newaxis])
+        loudness_norm = np.reshape(loudness_norm, batch['loudness_db'].shape)
+
+        audio_features_mod['loudness_db'] = loudness_norm
+
+        # Auto-tune.
+        if autotune:
+            f0_midi = np.array(ddsp.core.hz_to_midi(audio_features_mod['f0_hz']))
+            tuning_factor = get_tuning_factor(f0_midi, audio_features_mod['f0_confidence'], mask_on)
+            f0_midi_at = auto_tune(f0_midi, tuning_factor, mask_on, amount=autotune)
+            audio_features_mod['f0_hz'] = ddsp.core.midi_to_hz(f0_midi_at)
+
+    else:
+        print('\nSkipping auto-adjust (no notes detected or ADJUST box empty).')
+
+# Resynthesize audio.
+outputs = model(batch, training=False)
+
+audio_gen = model.get_audio_from_outputs(outputs)
+
+play(audio_gen, savefile=jbprompt.selected_filename)
+
+print("Finished Playing Sound")
