@@ -2,7 +2,7 @@ from __future__ import print_function, unicode_literals
 from PyInquirer import prompt
 from pyfiglet import Figlet
 
-import note_gen
+import constants
 
 
 class JBPrompt:
@@ -42,16 +42,16 @@ class JBPrompt:
         answers = prompt(questions)
 
         instruments = {
-            "saxo": ["./data/ddsp-saxo", "./data/ddsp-saxo/ckpt-20000"],
-            "flute": ["./data/ddsp-saxo", "./data/ddsp-flute/ckpt-20000"],
-            "violin": ["./data/ddsp-saxo", "./data/ddsp-violin/ckpt-40000"],
+            "saxo": ["./data/ddsp-saxo", "./data/ddsp-saxo/ckpt-20000", constants.SAXO_STATS_OBJECT],
+            "flute": ["./data/ddsp-saxo", "./data/ddsp-flute/ckpt-20000", constants.FLUTE_STATS_OBJECT],
+            "violin": ["./data/ddsp-saxo", "./data/ddsp-violin/ckpt-40000", constants.VIOLIN_STATS_OBJECT],
         }
         self.selected_instrument = (instruments.get(answers['instrument'], "Invalid Instrument"))
 
         songs = {
-            "cantina": [note_gen.CANTINA_NOTES, note_gen.CANTINA_BEATS],
-            "test": [note_gen.TEST_NOTES, note_gen.TEST_BEATS],
-            "one": [note_gen.ONE_NOTES, note_gen.ONE_BEATS]
+            "cantina": [constants.CANTINA_NOTES, constants.CANTINA_BEATS, 131],
+            "test": [constants.TEST_NOTES, constants.TEST_BEATS, 140],
+            "one": [constants.ONE_NOTES, constants.ONE_BEATS, 160]
         }
         self.selected_song = (songs.get(answers['song'], "Invalid Song"))
 
