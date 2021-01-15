@@ -33,13 +33,14 @@ class Song:
     #default_duration is the default duration of a note in number of beats
     def gen_tensor(self, tempo = 500000, default_duration=4):
 
-        set_tempo (tempo)
+        self.set_tempo (tempo)
 
         n_frames = 0
 
         notes = []
         notes_loudness = []
 
+        track = self.track
         i_max = len(track) -1
 
         for i in range(len(track)) :
@@ -61,7 +62,7 @@ class Song:
                     msj = track[j]
                     if not msj.is_meta :
                         duration += msj.time
-                        if (msj.note == note) and (msj.velocity == 0) : #End of note
+                        if (msj.type == "note_on") and (msj.note == note) and (msj.velocity == 0) : #End of note
                             end_found = True
                             break
                 if not end_found :
@@ -83,13 +84,13 @@ class Song:
                     #Disable overlay notes :
                     for j in range(min(i+1,i_max),min(i+10,i_max)) :
                         msj = track[j]
-                        if not msj.is_meta :
+                        if (not msj.is_meta) and (msj.type=="note_on") :
                             if (msj.note == note) and (msj.velocity == 0) : #End of note
                                 break
-                            elif (msj.type == "note_on") :
+                            else :
                                 msj.velocity = 0
 
-                #Managing dt between this note and the next
+                #Managing dt between end of this note and beginning of the next
                 if (i<i_max) :
                     dt = 0
                     j = i+1
@@ -104,16 +105,17 @@ class Song:
                         else : 
                             break
                     dt = dt - duration
-                    dt_frames = dt*self.n_frames_per_tick
+                    dt_frames = ceil(dt*self.n_frames_per_tick)
                     if (dt_frames > 0) :
-                        notes.append(0 * np.ones([1, dt_frames, 1], dtype=np.float32)
-                        notes_loudness.append(-60 * np.ones([1, dt_frames, 1], dtype=np.float32)
+                        n_frames += dt_frames
+                        notes.append(0 * np.ones([1, dt_frames, 1], dtype=np.float32))
+                        notes_loudness.append(-60 * np.ones([1, dt_frames, 1], dtype=np.float32))
                 
 
-                note_n_frame = duration*self.n_frames_per_tick
+                note_n_frame = ceil(duration*self.n_frames_per_tick)
                 n_frames += note_n_frame
                 
-                notes.append(f * np.ones([1, note_n_frame, 1], dtype=np.float32)
+                notes.append(f * np.ones([1, note_n_frame, 1], dtype=np.float32))
                 #----------When using TF use instead:
                 #notes.append(
                 #tf.convert_to_tensor(f * np.ones([1, note_n_frame, 1], dtype=np.float32),
@@ -138,7 +140,7 @@ class Song:
                 
             elif (msg.type == "set_tempo") :
                 #New tempo
-                set_tempo(msg.tempo)
+                self.set_tempo(msg.tempo)
                 
         #----------When using TF :
         #f0_confidence = tf.convert_to_tensor(1.0 * np.ones([1, n_frames, 1], dtype=np.float32), dtype=tf.float32)
