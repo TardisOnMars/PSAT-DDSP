@@ -31,6 +31,7 @@ class Song:
     #tempo is the default tempo in microseconds per beat
     #the tempo should usually be specified in the midi file and can be changed by meta messages of type set_tempo
     #default_duration is the default duration of a note in number of beats
+    #all durations in a midi file are expressed in ticks
     def gen_tensor(self, tempo = 500000, default_duration=4):
 
         self.set_tempo (tempo)
@@ -49,7 +50,6 @@ class Song:
 
             if (msg.type == "note_on" and msg.velocity > 0) :
                 #New note
-                #All durations are expressed in ticks
 
                 note = msg.note
                 f = get_freq_from_midi_code(msg.note)
@@ -62,7 +62,7 @@ class Song:
                     msj = track[j]
                     if not msj.is_meta :
                         duration += msj.time
-                        if (msj.type == "note_on") and (msj.note == note) and (msj.velocity == 0) : #End of note
+                        if ((msj.type == "note_on") and (msj.note == note) and (msj.velocity == 0)) or ((msj.type == "note_off") and (msj.note == note)) : #End of note
                             end_found = True
                             break
                 if not end_found :
@@ -121,17 +121,13 @@ class Song:
                 #tf.convert_to_tensor(f * np.ones([1, note_n_frame, 1], dtype=np.float32),
                 #                     dtype=tf.float32))
 
-                #TODO : calculer loudness et les coeffs ADSR en fonction de v
+                
                 #ADSR 
-                #attack = floor(note_n_frame * 0.60)
-                #decay = floor(note_n_frame * 0.20)
-                #sustain = floor(note_n_frame * 0.10)
-                #release = note_n_frame - attack - decay - sustain
-
-                attack = 0
-                decay = 0
-                sustain = note_n_frame
-                release = 0
+                #TODO : calculer loudness et les coeffs ADSR en fonction de v
+                attack = floor(note_n_frame * 0.60)
+                decay = floor(note_n_frame * 0.20)
+                sustain = floor(note_n_frame * 0.10)
+                release = note_n_frame - attack - decay - sustain
 
                 note_loudness = np.concatenate((np.linspace(-60.0, 0.0, attack), np.linspace(0.0, -10.0, decay),
                                                 np.linspace(-10.0, -10.0, sustain), np.linspace(-10.0, -60.0, release)),
@@ -141,15 +137,16 @@ class Song:
             elif (msg.type == "set_tempo") :
                 #New tempo
                 self.set_tempo(msg.tempo)
-                
-        #----------When using TF :
+             
+        f0_confidence = 1.0 * np.ones([1, n_frames, 1], dtype=np.float32)
+        #----------When using TF use instead:
         #f0_confidence = tf.convert_to_tensor(1.0 * np.ones([1, n_frames, 1], dtype=np.float32), dtype=tf.float32)
         #f0_hz = tf.concat(notes, 1)
         #loudness_db = tf.convert_to_tensor(np.concatenate(notes_loudness)[np.newaxis, :, np.newaxis], dtype=tf.float32)
 
         #----------When using TF use instead:
         #return f0_confidence, f0_hz, loudness_db, n_frames
-        return notes, notes_loudness, n_frames
+        return f0_confidence, notes, notes_loudness, n_frames
 
     #Displays the [max] firsts lines in the midi file. If max is not specified, all are displayed
     def disp_midi_file (self,max=None) :
@@ -167,7 +164,8 @@ class Song:
 
 
 if __name__ == '__main__':
-    midi_paths = ("midi_files/37808.mid", "Bach_Preludio_BWV997.mid")
-    song = Song(midi_paths[0],0)
+    midi_files = ("37808.mid", "Bach_Preludio_BWV997.mid","Test1.mid")
+    midi_index = 2
+    song = Song("midi_files/"+midi_files[midi_index],0)
     song.disp_midi_file(20)
-    song.gen_tensor()
+    f0_confidence, notes, notes_loudness, n_frames = song.gen_tensor()
