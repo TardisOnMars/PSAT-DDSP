@@ -30,7 +30,8 @@ class Song:
 
     #tempo is the default tempo in microseconds per beat
     #the tempo should usually be specified in the midi file and can be changed by meta messages of type set_tempo
-    def gen_tensor(self, tempo = 500000):
+    #default_duration is the default duration of a note in number of beats
+    def gen_tensor(self, tempo = 500000, default_duration=4):
 
         set_tempo (tempo)
 
@@ -38,6 +39,8 @@ class Song:
 
         notes = []
         notes_loudness = []
+
+        i_max = len(track) -1
 
         for i in range(len(track)) :
 
@@ -47,9 +50,6 @@ class Song:
                 #New note
                 #All durations are expressed in ticks
 
-                #TODO : determiner dt depuis note precedente : dt
-                #TODO : ajouter du "vide" si dt > 0
-
                 note = msg.note
                 f = get_freq_from_midi_code(msg.note)
                 v = msg.velocity
@@ -57,38 +57,97 @@ class Song:
                 #Note duration
                 duration = 0
                 end_found = False
-                for j in i+1:i+10
+                for j in range(min(i+1,i_max),min(i+10,i_max)) :
                     msj = track[j]
                     if not msj.is_meta :
                         duration += msj.time
                         if (msj.note == note) and (msj.velocity == 0) : #End of note
-                        end_found = True
-                        break
+                            end_found = True
+                            break
                 if not end_found :
-                    duration = 4*self.tick_per_beat #Default duration
-                #TODO : set velocity to 0 for other notes that would start before the end of this note
+                    duration = default_duration*self.tick_per_beat
+                    #Disable overlay notes :
+                    dur_temp = 0
+                    if (i<i_max) :
+                        j = i+1
+                        while dur_temp < duration :
+                            msj = track[j]
+                            if (not msj.is_meta) and (msj.type == "note_on"):
+                                dur_temp += msj.time
+                                msj.velocity = 0
+                            if (j< i_max) :
+                                j += 1
+                            else : 
+                                break
+                else :
+                    #Disable overlay notes :
+                    for j in range(min(i+1,i_max),min(i+10,i_max)) :
+                        msj = track[j]
+                        if not msj.is_meta :
+                            if (msj.note == note) and (msj.velocity == 0) : #End of note
+                                break
+                            elif (msj.type == "note_on") :
+                                msj.velocity = 0
 
+                #Managing dt between this note and the next
+                if (i<i_max) :
+                    dt = 0
+                    j = i+1
+                    while True :
+                        msj = track[j]
+                        if (not msj.is_meta) and (msj.type == "note_on"):
+                            dt += msj.time
+                            if (msj.velocity > 0) :
+                                break
+                        if (j< i_max) :
+                            j += 1
+                        else : 
+                            break
+                    dt = dt - duration
+                    dt_frames = dt*self.n_frames_per_tick
+                    if (dt_frames > 0) :
+                        notes.append(0 * np.ones([1, dt_frames, 1], dtype=np.float32)
+                        notes_loudness.append(-60 * np.ones([1, dt_frames, 1], dtype=np.float32)
+                
+
+                note_n_frame = duration*self.n_frames_per_tick
+                n_frames += note_n_frame
+                
                 notes.append(f * np.ones([1, note_n_frame, 1], dtype=np.float32)
-                #-----When using TF use instead:
+                #----------When using TF use instead:
                 #notes.append(
                 #tf.convert_to_tensor(f * np.ones([1, note_n_frame, 1], dtype=np.float32),
                 #                     dtype=tf.float32))
 
-                #TODO : calculer loudness et les coeffs ADSR (en fonction de v)
-                #TODO : ajouter enveloppe ADSR dans notes_loudness
+                #TODO : calculer loudness et les coeffs ADSR en fonction de v
+                #ADSR 
+                #attack = floor(note_n_frame * 0.60)
+                #decay = floor(note_n_frame * 0.20)
+                #sustain = floor(note_n_frame * 0.10)
+                #release = note_n_frame - attack - decay - sustain
 
-                #TODO : increment n_frames
+                attack = 0
+                decay = 0
+                sustain = note_n_frame
+                release = 0
+
+                note_loudness = np.concatenate((np.linspace(-60.0, 0.0, attack), np.linspace(0.0, -10.0, decay),
+                                                np.linspace(-10.0, -10.0, sustain), np.linspace(-10.0, -60.0, release)),
+                                               axis=None)
+                notes_loudness.append(note_loudness)
                 
             elif (msg.type == "set_tempo") :
                 #New tempo
                 set_tempo(msg.tempo)
                 
-        #-----When using TF :
+        #----------When using TF :
         #f0_confidence = tf.convert_to_tensor(1.0 * np.ones([1, n_frames, 1], dtype=np.float32), dtype=tf.float32)
         #f0_hz = tf.concat(notes, 1)
         #loudness_db = tf.convert_to_tensor(np.concatenate(notes_loudness)[np.newaxis, :, np.newaxis], dtype=tf.float32)
-        
+
+        #----------When using TF use instead:
         #return f0_confidence, f0_hz, loudness_db, n_frames
+        return notes, notes_loudness, n_frames
 
     #Displays the [max] firsts lines in the midi file. If max is not specified, all are displayed
     def disp_midi_file (self,max=None) :
@@ -108,4 +167,5 @@ class Song:
 if __name__ == '__main__':
     midi_paths = ("midi_files/37808.mid", "Bach_Preludio_BWV997.mid")
     song = Song(midi_paths[0],0)
-    song.disp_midi_file(10)
+    song.disp_midi_file(20)
+    song.gen_tensor()
