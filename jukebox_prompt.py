@@ -58,6 +58,5 @@ class JBPrompt:
         self.selected_filename = answers['save_name'] + '.wav' if answers['save'] is True else ""
 
 
-
 if __name__ == '__main__':
     jbprompt = JBPrompt()
