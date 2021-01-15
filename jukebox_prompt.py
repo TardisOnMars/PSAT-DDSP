@@ -15,7 +15,7 @@ class JBPrompt:
                 'type': 'list',
                 'name': 'song',
                 'message': 'What song would you like to play ?',
-                'choices': ['Test', 'Cantina', 'One'],
+                'choices': ['Test', 'Cantina', 'One', 'Test_Midi'],
                 'filter': lambda val: val.lower()
             },
             {
@@ -51,7 +51,8 @@ class JBPrompt:
         songs = {
             "cantina": [constants.CANTINA_NOTES, constants.CANTINA_BEATS, 131],
             "test": [constants.TEST_NOTES, constants.TEST_BEATS, 140],
-            "one": [constants.ONE_NOTES, constants.ONE_BEATS, 160]
+            "one": [constants.ONE_NOTES, constants.ONE_BEATS, 160],
+            "test_midi": ["midi", "midi_files/Test1.mid"]
         }
         self.selected_song = (songs.get(answers['song'], "Invalid Song"))
 

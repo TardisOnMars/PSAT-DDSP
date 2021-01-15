@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 from jukebox_prompt import JBPrompt
 from note_gen import Song
+from midi_gen import MidiSong
 from utils import play, detect_notes, fit_quantile_transform, shift_f0, auto_tune, get_tuning_factor
 
 warnings.filterwarnings("ignore")
@@ -17,7 +18,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 jbprompt = JBPrompt()
 
-song = Song(jbprompt.selected_song[0], jbprompt.selected_song[1], jbprompt.selected_song[2])
+if jbprompt.selected_song[0] == 'midi':
+    song = MidiSong(jbprompt.selected_song[1])
+else:
+    song = Song(jbprompt.selected_song[0], jbprompt.selected_song[1], jbprompt.selected_song[2])
 
 hop_size = 64
 f0_confidence, f0_hz, loudness_db, n_frames = song.gen_tensor()
