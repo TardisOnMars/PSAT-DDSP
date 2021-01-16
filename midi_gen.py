@@ -51,14 +51,6 @@ class MidiSong:
     def gen_tensor(self, tempo = 500000, default_duration=4, attack_dur = 0.5, decay_dur = 0.25, release_dur = 0.5, def_attack_loudness = 0.0, def_sustain_loudness = -10.0, velocity_adsr = True, v_def=75.0):
 
         self.set_tempo(tempo)
-        self.set_tempo (tempo)
-        self.attack_dur = attack_dur
-        self.decay_dur = decay_dur
-        self.release_dur = release_dur
-        self.def_attack_loudness = def_attack_loudness
-        self.def_sustain_loudness = def_sustain_loudness
-        self.velocity_adsr = velocity_adsr
-        self.v_def = v_def
         
         n_frames = 0
 
@@ -122,24 +114,24 @@ class MidiSong:
 
                 #ADSR 
                 remaining_frames = n_frames
-                if(self.velocity_adsr) :
-                    v_factor = self.v_def/v
+                if(velocity_adsr) :
+                    v_factor = v_def/v
                 else :
                     v_factor = 1
-                attack = min(floor(self.attack_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                attack = min(floor(attack_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
                 remaining_frames -= attack
-                decay = min(floor(self.decay_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                decay = min(floor(decay_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
                 remaining_frames -= decay
-                release = min(floor(self.release_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                release = min(floor(release_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
                 remaining_frames -= release
                 sustain = remaining_frames
 
-                if(self.velocity_adsr) :
-                    attack_loudness = self.def_attack_loudness*v/self.v_def
-                    sustain_loudness = self.def_sustain_loudness*v/self.v_def
+                if(velocity_adsr) :
+                    attack_loudness = def_attack_loudness*v/v_def
+                    sustain_loudness = def_sustain_loudness*v/v_def
                 else :
-                    attack_loudness = self.def_attack_loudness
-                    sustain_loudness = self.def_sustain_loudness
+                    attack_loudness = def_attack_loudness
+                    sustain_loudness = def_sustain_loudness
 
                 note_loudness = np.concatenate((np.linspace(-60.0, attack_loudness, attack), np.linspace(attack_loudness, sustain_loudness, decay),
                                                 np.linspace(sustain_loudness, sustain_loudness, sustain), np.linspace(sustain_loudness, -60.0, release)),
