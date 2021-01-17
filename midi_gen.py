@@ -28,13 +28,13 @@ class MidiSong:
                 f"WARNING n_track = {self.n_track} larger than the amount of available tracks.\nLongest track used "
                 f"instead.\n")
             self.n_track = -1
-        if (self.n_track == -1) :
+        if self.n_track == -1:
             max_len = -1
-            for track in self.mid.tracks :
-                if len(track) > max_len :
+            for track in self.mid.tracks:
+                if len(track) > max_len:
                     self.track = track
                     max_len = len(track)
-        else :
+        else:
             self.track = self.mid.tracks[self.n_track]
 
     def set_tempo(self, new_tempo):
@@ -48,10 +48,11 @@ class MidiSong:
     # if velocity_adsr is True, the ADSR envelope depends on the velocity of the note
     # v_def is the default velocity : above is high velovity and uder v_def is low velocity
     # all durations in a midi file are expressed in ticks
-    def gen_tensor(self, tempo = 500000, default_duration=4, attack_dur = 0.5, decay_dur = 0.25, release_dur = 0.5, def_attack_loudness = 0.0, def_sustain_loudness = -10.0, velocity_adsr = True, v_def=75.0):
+    def gen_tensor(self, tempo=500000, default_duration=4, attack_dur=0.5, decay_dur=0.25, release_dur=0.5,
+                   def_attack_loudness=0.0, def_sustain_loudness=-10.0, velocity_adsr=True, v_def=75.0):
 
         self.set_tempo(tempo)
-        
+
         n_frames = 0
 
         notes = []
@@ -98,13 +99,13 @@ class MidiSong:
                     # Disable overlay notes :
                     for j in range(min(i + 1, i_max), min(i + 10, i_max)):
                         msj = track[j]
-                        if (not msj.is_meta):
-                            if (msj.type=="note_on"):
-                                if (msj.note == note) and (msj.velocity == 0): #End of note note_on
+                        if not msj.is_meta:
+                            if msj.type == "note_on":
+                                if (msj.note == note) and (msj.velocity == 0):  # End of note note_on
                                     break
-                                else :
+                                else:
                                     msj.velocity = 0
-                            elif (msj.type=="note_off") and (msj.note == note): #Enf of note note_off
+                            elif (msj.type == "note_off") and (msj.note == note):  # Enf of note note_off
                                 break
 
                 note_n_frame = ceil(duration * self.n_frames_per_tick)
@@ -112,30 +113,34 @@ class MidiSong:
 
                 notes.append(f * np.ones(note_n_frame, dtype=np.float32))
 
-                #ADSR 
-                remaining_frames = n_frames
-                if(velocity_adsr) :
-                    v_factor = v_def/v
-                else :
+                # ADSR
+                remaining_frames = note_n_frame
+                if velocity_adsr:
+                    v_factor = v_def / v
+                else:
                     v_factor = 1
-                attack = min(floor(attack_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                attack = min(floor(attack_dur * v_factor * self.tick_per_beat * self.n_frames_per_tick),
+                             remaining_frames)
                 remaining_frames -= attack
-                decay = min(floor(decay_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                decay = min(floor(decay_dur * v_factor * self.tick_per_beat * self.n_frames_per_tick), remaining_frames)
                 remaining_frames -= decay
-                release = min(floor(release_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                release = min(floor(release_dur * v_factor * self.tick_per_beat * self.n_frames_per_tick),
+                              remaining_frames)
                 remaining_frames -= release
                 sustain = remaining_frames
 
-                if(velocity_adsr) :
-                    attack_loudness = def_attack_loudness*v/v_def
-                    sustain_loudness = def_sustain_loudness*v/v_def
-                else :
+                if velocity_adsr:
+                    attack_loudness = def_attack_loudness * v / v_def
+                    sustain_loudness = def_sustain_loudness * v / v_def
+                else:
                     attack_loudness = def_attack_loudness
                     sustain_loudness = def_sustain_loudness
 
-                note_loudness = np.concatenate((np.linspace(-60.0, attack_loudness, attack), np.linspace(attack_loudness, sustain_loudness, decay),
-                                                np.linspace(sustain_loudness, sustain_loudness, sustain), np.linspace(sustain_loudness, -60.0, release)),
-                                               axis=None)
+                note_loudness = np.concatenate(
+                    (np.linspace(-60.0, attack_loudness, attack), np.linspace(attack_loudness, sustain_loudness, decay),
+                     np.linspace(sustain_loudness, sustain_loudness, sustain),
+                     np.linspace(sustain_loudness, -60.0, release)),
+                    axis=None)
                 notes_loudness.append(note_loudness)
 
                 # Managing dt between end of this note and beginning of the next
@@ -171,7 +176,6 @@ class MidiSong:
 
     # Displays the [max] firsts lines in the midi file. If max is not specified, all are displayed
     def disp_midi_file(self, max_lines=None):
-
         for msg in self.track[0:max_lines]:
             print("--------------")
             print(msg)
@@ -184,7 +188,7 @@ class MidiSong:
 
 
 if __name__ == '__main__':
-    midi_files = ("37808.mid", "Bach_Preludio_BWV997.mid", "Test1.mid")
+    midi_files = ("37808.mid", "Prelude_Bach.mid", "Test1.mid")
     midi_index = 2
     song = MidiSong("midi_files/" + midi_files[midi_index])
     song.disp_midi_file(20)
