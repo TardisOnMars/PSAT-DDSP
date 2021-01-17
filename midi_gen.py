@@ -11,7 +11,7 @@ def get_freq_from_midi_code(code):
 
 
 class MidiSong:
-    def __init__(self, midi_path, n_track=0):
+    def __init__(self, midi_path, n_track=-1):
 
         self.midi_path = midi_path
         self.mid = MidiFile(midi_path)
@@ -25,10 +25,17 @@ class MidiSong:
         self.n_track = n_track
         if self.n_track >= len(self.mid.tracks):
             print(
-                f"WARNING n_track = {self.n_track} larger than the amount of available tracks.\nFirst track used "
+                f"WARNING n_track = {self.n_track} larger than the amount of available tracks.\nLongest track used "
                 f"instead.\n")
-            self.n_track = 0
-        self.track = self.mid.tracks[self.n_track]
+            self.n_track = -1
+        if (self.n_track == -1) :
+            max_len = -1
+            for track in self.mid.tracks :
+                if len(track) > max_len :
+                    self.track = track
+                    max_len = len(track)
+        else :
+            self.track = self.mid.tracks[self.n_track]
 
     def set_tempo(self, new_tempo):
         self.tempo = new_tempo
@@ -37,11 +44,14 @@ class MidiSong:
     # tempo is the default tempo in microseconds per beat
     # the tempo should usually be specified in the midi file and can be changed by meta messages of type set_tempo
     # default_duration is the default duration of a note in number of beats
+    # attack_dur, decay_dur and release_dur are the duration of the ADSR envelope in number of beats
+    # if velocity_adsr is True, the ADSR envelope depends on the velocity of the note
+    # v_def is the default velocity : above is high velovity and uder v_def is low velocity
     # all durations in a midi file are expressed in ticks
-    def gen_tensor(self, tempo=500000, default_duration=4):
+    def gen_tensor(self, tempo = 500000, default_duration=4, attack_dur = 0.5, decay_dur = 0.25, release_dur = 0.5, def_attack_loudness = 0.0, def_sustain_loudness = -10.0, velocity_adsr = True, v_def=75.0):
 
         self.set_tempo(tempo)
-
+        
         n_frames = 0
 
         notes = []
@@ -88,25 +98,43 @@ class MidiSong:
                     # Disable overlay notes :
                     for j in range(min(i + 1, i_max), min(i + 10, i_max)):
                         msj = track[j]
-                        if (not msj.is_meta) and (msj.type == "note_on"):
-                            if (msj.note == note) and (msj.velocity == 0):  # End of note
+                        if (not msj.is_meta):
+                            if (msj.type=="note_on"):
+                                if (msj.note == note) and (msj.velocity == 0): #End of note note_on
+                                    break
+                                else :
+                                    msj.velocity = 0
+                            elif (msj.type=="note_off") and (msj.note == note): #Enf of note note_off
                                 break
-                            else:
-                                msj.velocity = 0
 
                 note_n_frame = ceil(duration * self.n_frames_per_tick)
                 n_frames += note_n_frame
 
                 notes.append(f * np.ones(note_n_frame, dtype=np.float32))
 
-                # ADSR
-                attack = floor(note_n_frame * 0.60)
-                decay = floor(note_n_frame * 0.20)
-                sustain = floor(note_n_frame * 0.10)
-                release = note_n_frame - attack - decay - sustain
+                #ADSR 
+                remaining_frames = n_frames
+                if(velocity_adsr) :
+                    v_factor = v_def/v
+                else :
+                    v_factor = 1
+                attack = min(floor(attack_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                remaining_frames -= attack
+                decay = min(floor(decay_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                remaining_frames -= decay
+                release = min(floor(release_dur*v_factor*self.tick_per_beat*self.n_frames_per_tick),remaining_frames)
+                remaining_frames -= release
+                sustain = remaining_frames
 
-                note_loudness = np.concatenate((np.linspace(-60.0, 0.0, attack), np.linspace(0.0, -10.0, decay),
-                                                np.linspace(-10.0, -10.0, sustain), np.linspace(-10.0, -60.0, release)),
+                if(velocity_adsr) :
+                    attack_loudness = def_attack_loudness*v/v_def
+                    sustain_loudness = def_sustain_loudness*v/v_def
+                else :
+                    attack_loudness = def_attack_loudness
+                    sustain_loudness = def_sustain_loudness
+
+                note_loudness = np.concatenate((np.linspace(-60.0, attack_loudness, attack), np.linspace(attack_loudness, sustain_loudness, decay),
+                                                np.linspace(sustain_loudness, sustain_loudness, sustain), np.linspace(sustain_loudness, -60.0, release)),
                                                axis=None)
                 notes_loudness.append(note_loudness)
 
@@ -158,6 +186,6 @@ class MidiSong:
 if __name__ == '__main__':
     midi_files = ("37808.mid", "Bach_Preludio_BWV997.mid", "Test1.mid")
     midi_index = 2
-    song = MidiSong("midi_files/" + midi_files[midi_index], 0)
+    song = MidiSong("midi_files/" + midi_files[midi_index])
     song.disp_midi_file(20)
     f0_confidence, notes, notes_loudness, n_frames = song.gen_tensor()
